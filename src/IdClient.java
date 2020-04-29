@@ -121,7 +121,7 @@ public class IdClient {
 			}
 
 			Registry registry = LocateRegistry.getRegistry(host, registryPort);
-			Id stub = (Id) registry.lookup("IdLeader");
+			Id stub = (Id) registry.lookup("IdServer");
 
 			// check if the user wants to lookup someone with login name
 			if (line.hasOption('l')) {

@@ -1,5 +1,6 @@
 import java.util.Timer;
 import java.util.TimerTask;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -7,10 +8,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -18,6 +15,8 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.time.Instant;
@@ -34,10 +33,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	private static int registryPort = 1099;
 	private static Map lookupUsers = new HashMap();
 	private static Map reverseLookupUsers = new HashMap();
-	private static Map<InetAddress, IdServer> otherServers = new HashMap<InetAddress, IdServer>();
 	private static boolean verbose = false;
-	private static boolean isLeader = false;
-	
 
 	/**
 	 * @see
@@ -335,24 +331,42 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 			try {
 				System.out.println("Setting System Properties....");
-				System.out.println("Discovering other servers");
-				
-				// find out if there is a leader already bound in the registry
-				try {
-					IdServer server = new IdServer();					
-					server.bind("IdLeader");
-					System.out.println("No leader exists so I will step up");
-				}catch (Exception e) {
-					System.out.println("There is a leader so I need to listen to him");
-					isLeader = true;
-				}
-				
-				if(isLeader) {
-					setupLeaderRuntime();
-				} else {
-					listenForUpdates();
-				}
-				
+				IdServer server = new IdServer();
+				server.bind("IdServer");
+
+				int delay = 5000; // delay for 5 sec.
+				int period = 30000; // repeat every 15 sec.
+				Timer timer = new Timer();
+
+				timer.scheduleAtFixedRate(new TimerTask() {
+					public void run() {
+						try {
+							Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
+							Id stub = (Id) registry.lookup("IdServer");
+							stub.persistData();
+						} catch (RemoteException e) {
+							e.printStackTrace();
+						} catch (NotBoundException e) {
+							e.printStackTrace();
+						}
+					}
+				}, delay, period);
+
+				// Allow server to persist data before it shut down
+				Runtime.getRuntime().addShutdownHook(new Thread() {
+					public void run() {
+						try {
+							System.out.println("Shutting down ...");
+							Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
+							Id stub = (Id) registry.lookup("IdServer");
+							stub.persistData();
+						} catch (RemoteException e) {
+							e.printStackTrace();
+						} catch (NotBoundException e) {
+							e.printStackTrace();
+						}
+					}
+				});
 			} catch (Exception e) {
 				System.out.println("IdServer: " + e.getMessage());
 				e.printStackTrace();
@@ -363,47 +377,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 	}
 
-	private static void setupLeaderRuntime() {
-		int delay = 5000; // delay for 5 sec.
-		int period = 30000; // repeat every 15 sec.
-		Timer timer = new Timer();
-
-		timer.scheduleAtFixedRate(new TimerTask() {
-			public void run() {
-				try {
-					Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
-					Id stub = (Id) registry.lookup("IdLeader");
-					stub.persistData();
-				} catch (RemoteException e) {
-					e.printStackTrace();
-				} catch (NotBoundException e) {
-					e.printStackTrace();
-				}
-			}
-		}, delay, period);
-
-		// Allow server to persist data before it shut down
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-			public void run() {
-				try {
-					System.out.println("Shutting down ...");
-					Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
-					Id stub = (Id) registry.lookup("IdServer");
-					stub.persistData();
-				} catch (RemoteException e) {
-					e.printStackTrace();
-				} catch (NotBoundException e) {
-					e.printStackTrace();
-				}
-			}
-		});
-	}
-
-	private static void listenForUpdates() {
-		// TODO Auto-generated method stub
-		
-	}
-
 	/**
 	 * represents all information about a user.
 	 * 
@@ -411,6 +384,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 *
 	 */
 	private class User implements Serializable {
+
+		/**
+		 * 
+		 */
 		private static final long serialVersionUID = 1L;
 		public UUID uuid;
 		public String loginName;
