@@ -1,13 +1,11 @@
 import java.util.Timer;
 import java.util.TimerTask;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.Serializable;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -15,8 +13,6 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.time.Instant;
@@ -31,8 +27,8 @@ import org.apache.commons.cli.Options;
 public class IdServer extends UnicastRemoteObject implements Id {
 	private static final long serialVersionUID = -5629717487800742372L;
 	private static int registryPort = 1099;
-	private static Map lookupUsers = new HashMap();
-	private static Map reverseLookupUsers = new HashMap();
+	private static Map<String, User> lookupUsers = new HashMap<String, User>();
+	private static Map<UUID, User> reverseLookupUsers = new HashMap<UUID, User>();
 	private static boolean verbose = false;
 
 	/**
@@ -72,7 +68,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 			System.out.println("IdServer: client wishes to modify " + oldLoginName + " to " + newLoginName);
 		}
 
-		User user = (User) lookupUsers.get(oldLoginName);
+		User user = lookupUsers.get(oldLoginName);
 		
 		if(user != null) {
 			if (user.password.equals(password)) {
@@ -102,7 +98,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	@Override
 	public synchronized boolean delete(String loginName, String password) {
 		if (lookupUsers.containsKey(loginName)) {
-			User user = (User) lookupUsers.get(loginName);
+			User user = lookupUsers.get(loginName);
 			if (user.password.equals(password)) {
 				if (verbose) {
 					System.out.println("IdServer: Deleted user " + loginName);
@@ -141,7 +137,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 */
 	@Override
 	public synchronized String lookup(String loginName) {
-		User user = (User) lookupUsers.get(loginName);
+		User user = lookupUsers.get(loginName);
 		if (user != null) {
 			if (verbose) {
 				System.out.println("IdServer: was able to lookup, user exists {" + user.loginName + "}");
@@ -160,7 +156,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 */
 	@Override
 	public synchronized String reverseLookup(UUID uuid) {
-		User user = (User) reverseLookupUsers.get(uuid);
+		User user = reverseLookupUsers.get(uuid);
 		if (user != null) {
 			if (verbose) {
 				System.out.println("IdServer: user exists {" + user.loginName + "}");
@@ -171,29 +167,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				System.out.println("IdServer: User does not exist");
 			}
 			return "User does not exist!";
-		}
-	}
-	
-	private static void reloadDatabase() throws ClassNotFoundException {
-		try {
-			File f = new File("lookupUsers.ser");
-			File f2 = new File("reverseLookupUsers.ser");
-			if (f.isFile() && f2.isFile()) {
-				System.out.println("reloading database from disk");
-				FileInputStream fis = new FileInputStream("lookupUsers.ser");
-				ObjectInputStream ois = new ObjectInputStream(fis);
-				lookupUsers = (Map) ois.readObject();
-				ois.close();
-				fis.close();
-
-				fis = new FileInputStream("reverseLookupUsers.ser");
-				ois = new ObjectInputStream(fis);
-				reverseLookupUsers = (Map) ois.readObject();
-				ois.close();
-				fis.close();
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
 		}
 	}
 
@@ -207,6 +180,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 
 		try {
+
 			// Convert Map to byte array
 			File file = new File("lookupUsers.ser");
 			FileOutputStream fos = new FileOutputStream(file);
@@ -250,8 +224,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 			for (String s : set) {
 				sb.append(s + ": ");
-				User usr = (User) IdServer.lookupUsers.get(s);
-				sb.append(usr.uuid);
+				sb.append(IdServer.lookupUsers.get(s).uuid);
 				sb.append("\n");
 			}
 			return sb.toString();
@@ -302,12 +275,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 		Options options = setupOptions();
 
-		try {
-			reloadDatabase();
-		} catch (ClassNotFoundException e1) {
-			e1.printStackTrace();
-			System.exit(1);
-		}
+		reloadDatabase();
 
 		if (args.length < 1) {
 			HelpFormatter formatter = new HelpFormatter();
@@ -377,18 +345,40 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 	}
 
+	@SuppressWarnings("unchecked")
+	private static void reloadDatabase() {
+		try {
+			File f = new File("lookupUsers.ser");
+			File f2 = new File("reverseLookupUsers.ser");
+			if (f.isFile() && f2.isFile()) {
+				System.out.println("reloading database form disk");
+				FileInputStream fis = new FileInputStream("lookupUsers.ser");
+				ObjectInputStream ois = new ObjectInputStream(fis);
+				lookupUsers = (Map<String, User>) ois.readObject();
+				ois.close();
+				fis.close();
+
+				fis = new FileInputStream("reverseLookupUsers.ser");
+				ois = new ObjectInputStream(fis);
+				reverseLookupUsers = (Map<UUID, User>) ois.readObject();
+				ois.close();
+				fis.close();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+	}
+
 	/**
 	 * represents all information about a user.
 	 * 
 	 * @author Lucas
 	 *
 	 */
-	private class User implements Serializable {
+	private class User {
 
-		/**
-		 * 
-		 */
-		private static final long serialVersionUID = 1L;
 		public UUID uuid;
 		public String loginName;
 		public String realName;
