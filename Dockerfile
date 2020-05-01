@@ -1,6 +1,5 @@
-FROM alpine
+FROM openjdk:11-jre-slim
 
-MAINTAINER Lucas Marchand <LucasMarchand158@u.boisestate.edu>
-ADD ./* ./src/
-WORKDIR /src/
-RUN ls
+ADD / /
+WORKDIR /
+CMD ["sh", "-c", "./run-server.sh"]
