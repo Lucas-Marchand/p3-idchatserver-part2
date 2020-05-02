@@ -6,7 +6,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.net.InetAddress;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -31,7 +30,11 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	private static Map<String, User> lookupUsers = new HashMap<String, User>();
 	private static Map<UUID, User> reverseLookupUsers = new HashMap<UUID, User>();
 	private static boolean verbose = false;
+	private static String BACKUP_SERVER = "backupServer";
+	private static String LEAD_SERVER = "leadServer";
+	private static String LEADER_IP = "";
 	private static String[] serverIPs = new String[0];
+	private static Boolean isLeader = false;
 
 	/**
 	 * @see
@@ -248,11 +251,9 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * 
 	 * @param name
 	 */
-	public void bind(String name) {
-
-		boolean b = leaderExists();
-
+	public void bind() {
 		try {
+			// we will always need to register our server with registry weather backup or leader
 			Registry registry = null;
 			try {
 				registry = LocateRegistry.getRegistry(registryPort);
@@ -261,6 +262,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				registry = LocateRegistry.createRegistry(registryPort);
 			}
 
+			// create the servers remote object
 			Id server = null;
 			try {
 				server = (IdServer) UnicastRemoteObject.exportObject(this, 0);
@@ -269,16 +271,39 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				server = (Id) UnicastRemoteObject.exportObject(this, 0);
 			}
 
-			registry.rebind(name, server);
-			System.out.println(name + " bound in registry to port: " + registryPort);
+			// determnine if we bind our name as a leader or a backup
+			if (foundLeader()) {
+				isLeader = false;
+				registry.rebind(BACKUP_SERVER, server);
+				System.out.println(BACKUP_SERVER + " bound in registry to port: " + registryPort);
+			} else {
+				isLeader = true;
+				registry.rebind(LEAD_SERVER, server);
+				System.out.println(LEAD_SERVER + " bound in registry to port: " + registryPort);
+			}
+
 		} catch (Exception e) {
 			e.printStackTrace();
-			System.out.println(name + ": Exception occurred: " + e);
+			System.out.println("INFO: Exception occurred: " + e);
 		}
 	}
 
-	private boolean leaderExists() {
+	private boolean foundLeader() {
+		for (String string : serverIPs) {
+			try {
+				System.out.println("Leader IP is: " + LEADER_IP);
+				Registry r = LocateRegistry.getRegistry(string, registryPort);
+				r.lookup(LEAD_SERVER);
+				LEADER_IP = string;
 
+				
+				return true;
+			} catch (RemoteException e) { // didnt find a registry
+				continue;
+			} catch (NotBoundException e) { // didnt find a bound name
+				continue;
+			}
+		}
 		return false;
 	}
 
@@ -288,7 +313,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * @author Lucas
 	 *
 	 */
-	private class User {
+	public class User {
 
 		public UUID uuid;
 		public String loginName;
@@ -386,18 +411,41 @@ public class IdServer extends UnicastRemoteObject implements Id {
 			try {
 				System.out.println("Setting System Properties....");
 				IdServer server = new IdServer();
-				server.bind("IdServer");
+				server.bind();
 
+				// we need a timer running to make sure if we are a leader we persist data to disk
 				int delay = 5000; // delay for 5 sec.
 				int period = 30000; // repeat every 15 sec.
 				Timer timer = new Timer();
 
 				timer.scheduleAtFixedRate(new TimerTask() {
 					public void run() {
+						if (isLeader){
+							try {
+								Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
+								Id stub = (Id) registry.lookup(LEAD_SERVER);
+								stub.persistData();
+							} catch (RemoteException e) {
+								e.printStackTrace();
+							} catch (NotBoundException e) {
+								e.printStackTrace();
+							}
+						}
+					}
+				}, delay, period);
+				
+				// we need another timer that will get data from the leader every so often just in case we need to become a leader
+				delay = 5000; // delay for 5 sec.
+				period = 30000; // repeat every 15 sec.
+				Timer timer2 = new Timer();
+
+				timer2.scheduleAtFixedRate(new TimerTask() {
+					public void run() {
 						try {
-							Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
-							Id stub = (Id) registry.lookup("IdServer");
-							stub.persistData();
+							Registry registry = LocateRegistry.getRegistry(LEADER_IP, registryPort);
+							Id stub = (Id) registry.lookup(LEAD_SERVER);
+							lookupUsers = stub.getLookupUsersDatabase();
+							reverseLookupUsers = stub.getReverseLookupUsersDatabase();
 						} catch (RemoteException e) {
 							e.printStackTrace();
 						} catch (NotBoundException e) {
@@ -406,13 +454,18 @@ public class IdServer extends UnicastRemoteObject implements Id {
 					}
 				}, delay, period);
 
-				// Allow server to persist data before it shut down
+				// Allow all server to persist data before being shut down
 				Runtime.getRuntime().addShutdownHook(new Thread() {
 					public void run() {
 						try {
 							System.out.println("Shutting down ...");
 							Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
-							Id stub = (Id) registry.lookup("IdServer");
+							Id stub = null;
+							if (isLeader){
+								stub = (Id) registry.lookup(LEAD_SERVER);
+							}else {
+								stub = (Id) registry.lookup(BACKUP_SERVER);
+							}
 							stub.persistData();
 						} catch (RemoteException e) {
 							e.printStackTrace();
@@ -429,5 +482,15 @@ public class IdServer extends UnicastRemoteObject implements Id {
 			System.err.println("Client exception: " + e.toString());
 			e.printStackTrace();
 		}
+	}
+
+	@Override
+	public Map<String, User> getLookupUsersDatabase() throws RemoteException {
+		return new HashMap<String, User>(lookupUsers);
+	}
+
+	@Override
+	public Map<UUID, User> getReverseLookupUsersDatabase() throws RemoteException {
+		return new HashMap<UUID, User>(reverseLookupUsers);
 	}
 }

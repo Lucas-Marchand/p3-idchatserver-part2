@@ -1,4 +1,6 @@
 import java.nio.charset.StandardCharsets;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.MessageDigest;
@@ -19,6 +21,9 @@ import org.apache.commons.cli.Options;
  *
  */
 public class IdClient {
+
+	private static String BACKUP_SERVER = "backupServer";
+	private static String LEAD_SERVER = "leadServer";
 
 	/**
 	 * Try encoding with SHA 512
@@ -43,9 +48,6 @@ public class IdClient {
 	private static Options setupOptions() {
 		// create the Options
 		Options options = new Options();
-
-		// option with no value after it
-		options.addOption("s", "server", true, "specifies the name of the server host");
 
 		// one option with optional value
 		Option portOption = new Option("n", "numport", true, "changes port to connect to RMI server");
@@ -81,7 +83,28 @@ public class IdClient {
 		getOption.setArgName("users|uuids|all");
 		options.addOption(getOption);
 
+		// one option with optional value
+		Option serverIPOption = new Option("s", "servers", true, "a list of the ip addresses for servers");
+		serverIPOption.isRequired();
+		serverIPOption.setArgs(Option.UNLIMITED_VALUES);
+		options.addOption(serverIPOption);
+
 		return options;
+	}
+
+	private static String findLeader(String[] serverIPs, int registryPort) {
+		for (String string : serverIPs) {
+			try {
+				Registry r = LocateRegistry.getRegistry(string, registryPort);
+				r.lookup(LEAD_SERVER);
+				return string;
+			} catch (RemoteException e) { // didnt find a registry
+				continue;
+			} catch (NotBoundException e) { // didnt find a bound name
+				continue;
+			}
+		}
+		return "";
 	}
 
 	/**
@@ -103,25 +126,27 @@ public class IdClient {
 			CommandLineParser parser = new DefaultParser();
 			// parse the command line arguments
 			CommandLine line = parser.parse(options, args);
-
-			String host = null;
 			int registryPort = 1099;
-			host = args[0];
-
-			if (line.hasOption('s')) {
-				host = line.getOptionValue('s');
-			}
 
 			if (line.hasOption('n')) {
 				registryPort = Integer.parseInt(line.getOptionValue('n'));
 			}
 
-			if (args.length == 0) {
+			String[] servers = line.getOptionValues('s');
+			
+			if (servers.length == 0) {
 				System.out.println(options);
 			}
 
+			String host = findLeader(servers, registryPort);
+
+			if (host.equals("")){
+				System.out.println("no leader was found by client");
+				System.exit(1);
+			}
+			
 			Registry registry = LocateRegistry.getRegistry(host, registryPort);
-			Id stub = (Id) registry.lookup("IdServer");
+			Id stub = (Id) registry.lookup("leadServer");
 
 			// check if the user wants to lookup someone with login name
 			if (line.hasOption('l')) {

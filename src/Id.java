@@ -1,3 +1,4 @@
+import java.util.Map;
 import java.util.UUID;
 import java.rmi.RemoteException;
 
@@ -61,4 +62,18 @@ public interface Id extends java.rmi.Remote
      * @throws RemoteException
      */
     public void persistData() throws RemoteException;
+
+    /**
+     * Gets lookup user data from the lead server
+     * @return
+     * @throws RemoteException
+     */
+	public Map<String, IdServer.User> getLookupUsersDatabase() throws RemoteException;
+
+    /**
+     * gets reverse lookup user data from the lead server
+     * @return
+     * @throws RemoteException
+     */
+	public Map<UUID, IdServer.User> getReverseLookupUsersDatabase() throws RemoteException;
 }
