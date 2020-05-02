@@ -1,0 +1,6 @@
+{
+    "java.project.referencedLibraries": [
+        "lib/**/*.jar",
+        "/home/lmarchand/p3-idchatserver-part2/**/*.jar"
+    ]
+}

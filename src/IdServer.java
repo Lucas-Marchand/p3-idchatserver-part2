@@ -6,6 +6,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetAddress;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -30,6 +31,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	private static Map<String, User> lookupUsers = new HashMap<String, User>();
 	private static Map<UUID, User> reverseLookupUsers = new HashMap<UUID, User>();
 	private static boolean verbose = false;
+	private static String[] serverIPs = new String[0];
 
 	/**
 	 * @see
@@ -56,6 +58,12 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		portOption.setOptionalArg(true);
 		options.addOption(portOption);
 
+		// one option with optional value
+		Option serverIPOption = new Option("i", "serverip", true, "a list of the ip addresses for servers");
+		serverIPOption.isRequired();
+		serverIPOption.setArgs(Option.UNLIMITED_VALUES);
+		options.addOption(serverIPOption);
+
 		return options;
 	}
 
@@ -69,8 +77,8 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 
 		User user = lookupUsers.get(oldLoginName);
-		
-		if(user != null) {
+
+		if (user != null) {
 			if (user.password.equals(password)) {
 				lookupUsers.put(newLoginName, user);
 				lookupUsers.remove(oldLoginName);
@@ -79,12 +87,12 @@ public class IdServer extends UnicastRemoteObject implements Id {
 					System.out.println("IdServer: " + oldLoginName + " is now " + newLoginName);
 				}
 				return true;
-			}else {
+			} else {
 				if (verbose) {
 					System.out.println("IdServer: Incorrect password for" + oldLoginName);
 				}
 			}
-		}else {
+		} else {
 			if (verbose) {
 				System.out.println("IdServer: could not find oldLoginName: " + oldLoginName);
 			}
@@ -241,6 +249,9 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * @param name
 	 */
 	public void bind(String name) {
+
+		boolean b = leaderExists();
+
 		try {
 			Registry registry = null;
 			try {
@@ -266,6 +277,77 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 	}
 
+	private boolean leaderExists() {
+
+		return false;
+	}
+
+	/**
+	 * represents all information about a user.
+	 * 
+	 * @author Lucas
+	 *
+	 */
+	private class User {
+
+		public UUID uuid;
+		public String loginName;
+		public String realName;
+		public String password;
+		public Instant timeCreated = Instant.now();
+		public Instant timeLastModified = Instant.now();
+
+		/**
+		 * creates a new user with credentials
+		 * 
+		 * @param login
+		 * @param userUUID
+		 * @param real
+		 * @param password2
+		 */
+		public User(String login, UUID userUUID, String real, String password2) {
+			this.loginName = login;
+			this.uuid = userUUID;
+			this.realName = real;
+			this.password = password2;
+		}
+
+		/**
+		 * gives us a way to display user data
+		 */
+		@Override
+		public String toString() {
+			return "Login Name: " + loginName + "; Real Name: " + realName + "; UUID: " + uuid + "; Last Modified: "
+					+ timeLastModified + "; Time Created: " + timeCreated;
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void reloadDatabase() {
+		try {
+			File f = new File("lookupUsers.ser");
+			File f2 = new File("reverseLookupUsers.ser");
+			if (f.isFile() && f2.isFile()) {
+				System.out.println("reloading database form disk");
+				FileInputStream fis = new FileInputStream("lookupUsers.ser");
+				ObjectInputStream ois = new ObjectInputStream(fis);
+				lookupUsers = (Map<String, User>) ois.readObject();
+				ois.close();
+				fis.close();
+
+				fis = new FileInputStream("reverseLookupUsers.ser");
+				ois = new ObjectInputStream(fis);
+				reverseLookupUsers = (Map<UUID, User>) ois.readObject();
+				ois.close();
+				fis.close();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+	}
+
 	/**
 	 * Main entry of program
 	 * 
@@ -288,6 +370,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 			CommandLineParser parser = new DefaultParser();
 			// parse the command line arguments
 			CommandLine line = parser.parse(options, args);
+
+			if (line.hasOption('i')) {
+				serverIPs = line.getOptionValues('i');
+			}
 
 			if (line.hasOption('n')) {
 				registryPort = Integer.parseInt(line.getOptionValue('n'));
@@ -342,72 +428,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		} catch (Exception e) {
 			System.err.println("Client exception: " + e.toString());
 			e.printStackTrace();
-		}
-	}
-
-	@SuppressWarnings("unchecked")
-	private static void reloadDatabase() {
-		try {
-			File f = new File("lookupUsers.ser");
-			File f2 = new File("reverseLookupUsers.ser");
-			if (f.isFile() && f2.isFile()) {
-				System.out.println("reloading database form disk");
-				FileInputStream fis = new FileInputStream("lookupUsers.ser");
-				ObjectInputStream ois = new ObjectInputStream(fis);
-				lookupUsers = (Map<String, User>) ois.readObject();
-				ois.close();
-				fis.close();
-
-				fis = new FileInputStream("reverseLookupUsers.ser");
-				ois = new ObjectInputStream(fis);
-				reverseLookupUsers = (Map<UUID, User>) ois.readObject();
-				ois.close();
-				fis.close();
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
-		}
-	}
-
-	/**
-	 * represents all information about a user.
-	 * 
-	 * @author Lucas
-	 *
-	 */
-	private class User {
-
-		public UUID uuid;
-		public String loginName;
-		public String realName;
-		public String password;
-		public Instant timeCreated = Instant.now();
-		public Instant timeLastModified = Instant.now();
-
-		/**
-		 * creates a new user with credentials
-		 * 
-		 * @param login
-		 * @param userUUID
-		 * @param real
-		 * @param password2
-		 */
-		public User(String login, UUID userUUID, String real, String password2) {
-			this.loginName = login;
-			this.uuid = userUUID;
-			this.realName = real;
-			this.password = password2;
-		}
-
-		/**
-		 * gives us a way to display user data
-		 */
-		@Override
-		public String toString() {
-			return "Login Name: " + loginName + "; Real Name: " + realName + "; UUID: " + uuid + "; Last Modified: "
-					+ timeLastModified + "; Time Created: " + timeCreated;
 		}
 	}
 }
