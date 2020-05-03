@@ -76,4 +76,27 @@ public interface Id extends java.rmi.Remote
      * @throws RemoteException
      */
 	public Map<UUID, IdServer.User> getReverseLookupUsersDatabase() throws RemoteException;
+
+    /**
+     * Used as part of the election. Servers with a lower pid should send this message to servers with a higher pid.
+     * @param sender    Server sending this message. Used for logging and validation.
+     * @return          True as long as the sender has a lower pid.
+     */
+    public boolean electionRequest(ServerInfo sender) throws RemoteException;
+
+    /**
+     * Used as part of the election. Sent by the new leader to all other servers.
+     * @param newLeader The new leader server.
+     */
+    public void electionWon(ServerInfo newLeader) throws RemoteException;
+
+    /** 
+     * Returns the current leader, and checks that it is alive. If the leader is not alive, an election is held in the background, and the new leader is returned.
+     * @return the current leader.
+     */
+    public ServerInfo currentLeader() throws RemoteException;
+
+    /** Dummy method used to check if server is alive.
+     */
+    public void isAlive() throws RemoteException;
 }

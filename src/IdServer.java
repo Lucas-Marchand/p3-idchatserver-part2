@@ -1,3 +1,5 @@
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.io.File;
@@ -35,6 +37,123 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	private static String LEADER_IP = "";
 	private static String[] serverIPs = new String[0];
 	private static Boolean isLeader = false;
+
+    private static ArrayList<ServerInfo> serverList = new ArrayList<ServerInfo>();
+    private static ServerInfo thisServer = null;
+    private static ServerInfo leadServer = null;
+
+    //If we are in an election, this should be true. Set it to false once a new leader has been selected.
+    private static volatile boolean leaderIndeterm = false;
+
+
+    private static boolean isLeader(){
+        return leadServer.compareTo(thisServer) == 0;
+    }
+
+//=====Begin Election Methods=====
+
+    private static void sendVictoryMessage(){
+        System.out.println("[sendVictoryMessage]\t\t Sending victory message to all servers.");
+        leadServer = thisServer;
+        for(var server : serverList){
+            if(thisServer.compareTo(server) == 0) continue;
+
+            try{
+                ((Id)LocateRegistry.getRegistry(server.hostname, registryPort).lookup("leadServer")).electionWon(thisServer);
+            }catch(Exception e){}
+        }
+    }
+
+    private static boolean sendElectionMessage(ServerInfo server){
+        System.out.println("[sendElectionMessage]\t\t Sending election message to all higher servers.");
+        try{
+            ((Id)LocateRegistry.getRegistry(server.hostname, registryPort).lookup("leadServer")).electionRequest(thisServer);
+            return true;
+        }catch(Exception e){}
+
+        return false;
+    }
+
+    private synchronized static void runElection(){
+        leaderIndeterm = true;
+        //Check if we are the highest PID
+        ServerInfo highestPID = Collections.max(serverList);
+        if(thisServer.compareTo(highestPID) == 0){
+            sendVictoryMessage();
+            leaderIndeterm = false;
+            return;
+        }
+
+        boolean leaderAlive = false;
+        for(var server : serverList){
+            if(thisServer.compareTo(server) < 0){   //Remote servere has greater pid
+                if(sendElectionMessage(server)){
+                    leaderAlive = true;
+                }
+            }
+        }
+
+        //No response, make self leader
+        if(!leaderAlive){
+            sendVictoryMessage();
+            leaderIndeterm = false;
+        }
+    }
+
+//===Begin Remote Election Methods===
+
+    @Override
+    public synchronized boolean electionRequest(ServerInfo sender){
+        System.out.println("[electionRequest]\t\t Received election request from ip: " + sender.hostname);
+        if(thisServer.compareTo(sender) > 0){   //Sender has a lower PID (expected)
+            runElection();
+        }else{
+            System.out.println("[electionRequest]\t\t Sender has a lower pid, ignoring. IP: " + sender.hostname);
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public synchronized void electionWon(ServerInfo newLeader){
+        System.out.println("[electionWon]\t\t Election won by server with hostname " + newLeader.hostname);
+        leadServer = newLeader;
+        leaderIndeterm = false;
+    }
+
+//===End Remote Election Methods===
+
+//=====End Election Methods=====
+
+    private boolean serverAlive(ServerInfo server){
+        try{
+            Registry registry = LocateRegistry.getRegistry(server.hostname, registryPort);
+            Id stub = (Id) registry.lookup("leadServer");
+            stub.isAlive();
+        }catch(Exception e){
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public synchronized ServerInfo currentLeader(){
+        if(!serverAlive(leadServer)){
+            runElection();
+            //Wait for election to finish.
+            //yes this is slow but we are running low on time
+            while(leaderIndeterm){}
+        }
+
+        return leadServer;
+    }
+
+    @Override
+    public void isAlive(){
+        System.out.println("[isAlive]\t\t Liveness check received");
+    }
+
 
 	/**
 	 * @see
@@ -273,10 +392,12 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 			// determnine if we bind our name as a leader or a backup
 			if (foundLeader()) {
+                System.out.println("Leader found, starting as backup");
 				isLeader = false;
 				registry.rebind(BACKUP_SERVER, server);
 				System.out.println(BACKUP_SERVER + " bound in registry to port: " + registryPort);
 			} else {
+                System.out.println("No leader found, making self leader");
 				isLeader = true;
 				registry.rebind(LEAD_SERVER, server);
 				System.out.println(LEAD_SERVER + " bound in registry to port: " + registryPort);
@@ -291,11 +412,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	private boolean foundLeader() {
 		for (String string : serverIPs) {
 			try {
-				System.out.println("Leader IP is: " + LEADER_IP);
 				Registry r = LocateRegistry.getRegistry(string, registryPort);
 				r.lookup(LEAD_SERVER);
 				LEADER_IP = string;
-
+				System.out.println("Leader IP is: " + LEADER_IP);
 				
 				return true;
 			} catch (RemoteException e) { // didnt find a registry
