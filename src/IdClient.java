@@ -1,3 +1,4 @@
+import java.util.Optional;
 import java.nio.charset.StandardCharsets;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
@@ -21,9 +22,6 @@ import org.apache.commons.cli.Options;
  *
  */
 public class IdClient {
-
-	private static String BACKUP_SERVER = "backupServer";
-	private static String LEAD_SERVER = "leadServer";
 
 	/**
 	 * Try encoding with SHA 512
@@ -92,19 +90,15 @@ public class IdClient {
 		return options;
 	}
 
-	private static String findLeader(String[] serverIPs, int registryPort) {
+	private static Optional<ServerInfo> findLeader(String[] serverIPs, int registryPort) {
 		for (String string : serverIPs) {
 			try {
-				Registry r = LocateRegistry.getRegistry(string, registryPort);
-				r.lookup(LEAD_SERVER);
-				return string;
-			} catch (RemoteException e) { // didnt find a registry
-				continue;
-			} catch (NotBoundException e) { // didnt find a bound name
-				continue;
-			}
+                return Optional.of(((Id)LocateRegistry.getRegistry(string, registryPort).lookup("server")).currentLeader());
+			} catch(Exception e){
+                System.out.println("IP " + string + " failed, trying next one.");
+            }
 		}
-		return "";
+        return Optional.empty();
 	}
 
 	/**
@@ -138,15 +132,15 @@ public class IdClient {
 				System.out.println(options);
 			}
 
-			String host = findLeader(servers, registryPort);
+			var host = findLeader(servers, registryPort);
 
-			if (host.equals("")){
+			if (!host.isPresent()){
 				System.out.println("no leader was found by client");
 				System.exit(1);
 			}
 			
-			Registry registry = LocateRegistry.getRegistry(host, registryPort);
-			Id stub = (Id) registry.lookup("leadServer");
+			Registry registry = LocateRegistry.getRegistry(host.get().getAddress(), registryPort);
+			Id stub = (Id) registry.lookup("server");
 
 			// check if the user wants to lookup someone with login name
 			if (line.hasOption('l')) {

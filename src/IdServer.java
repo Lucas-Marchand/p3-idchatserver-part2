@@ -127,15 +127,15 @@ public class IdServer extends UnicastRemoteObject implements Id {
         try{
             Registry registry = LocateRegistry.getRegistry(server.getAddress(), registryPort);
             Id stub = (Id) registry.lookup("server");
-            stub.isAlive();
+            return stub.isAlive();
         }catch(Exception e){
             return false;
         }
-        return true;
     }
 
     @Override
     public synchronized ServerInfo currentLeader(){
+        System.out.println("[currentLeader]\t\t Received request for lead server");
         if(!serverAlive(leadServer)){
             System.out.println("[currentLeader]\t\t LeadServer not alive. Running Election.");
             runElection();
@@ -147,12 +147,15 @@ public class IdServer extends UnicastRemoteObject implements Id {
             System.out.println("[currentLeader]\t\t New leader ip: " + leadServer.getAddress() + " PID: " + leadServer.getPID());
         }
 
+        System.out.println("Leader is still alive. IP:" + leadServer.getAddress());
+
         return leadServer;
     }
 
     @Override
-    public void isAlive(){
+    public boolean isAlive(){
         System.out.println("[isAlive]\t\t Liveness check received");
+        return true;
     }
 
     @Override
