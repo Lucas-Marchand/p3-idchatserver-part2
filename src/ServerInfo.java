@@ -1,12 +1,12 @@
 public class ServerInfo implements Comparable<ServerInfo>{
     public int pid = 0;
-    public String hostname = null;
+    public String address = null;
 
     @Override
     public int compareTo(ServerInfo other){
         if(other.pid > pid) return -1;
         if(other.pid < pid) return  1;
-        if(other.hostname == hostname){
+        if(other.address == address){
             return 0;
         }
 

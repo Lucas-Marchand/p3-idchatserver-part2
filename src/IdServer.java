@@ -1,3 +1,4 @@
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Timer;
@@ -12,6 +13,7 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.rmi.server.RemoteServer;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.util.Map;
@@ -46,7 +48,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
     private static volatile boolean leaderIndeterm = false;
 
 
-    private static boolean isLeader(){
+    private static synchronized boolean isLeader(){
         return leadServer.compareTo(thisServer) == 0;
     }
 
@@ -59,7 +61,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
             if(thisServer.compareTo(server) == 0) continue;
 
             try{
-                ((Id)LocateRegistry.getRegistry(server.hostname, registryPort).lookup("leadServer")).electionWon(thisServer);
+                ((Id)LocateRegistry.getRegistry(server.address, registryPort).lookup("leadServer")).electionWon(thisServer);
             }catch(Exception e){}
         }
     }
@@ -67,7 +69,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
     private static boolean sendElectionMessage(ServerInfo server){
         System.out.println("[sendElectionMessage]\t\t Sending election message to all higher servers.");
         try{
-            ((Id)LocateRegistry.getRegistry(server.hostname, registryPort).lookup("leadServer")).electionRequest(thisServer);
+            ((Id)LocateRegistry.getRegistry(server.address, registryPort).lookup("leadServer")).electionRequest(thisServer);
             return true;
         }catch(Exception e){}
 
@@ -104,11 +106,11 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     @Override
     public synchronized boolean electionRequest(ServerInfo sender){
-        System.out.println("[electionRequest]\t\t Received election request from ip: " + sender.hostname);
+        System.out.println("[electionRequest]\t\t Received election request from ip: " + sender.address);
         if(thisServer.compareTo(sender) > 0){   //Sender has a lower PID (expected)
             runElection();
         }else{
-            System.out.println("[electionRequest]\t\t Sender has a lower pid, ignoring. IP: " + sender.hostname);
+            System.out.println("[electionRequest]\t\t Sender has a lower pid, ignoring. IP: " + sender.address);
             return false;
         }
 
@@ -117,7 +119,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     @Override
     public synchronized void electionWon(ServerInfo newLeader){
-        System.out.println("[electionWon]\t\t Election won by server with hostname " + newLeader.hostname);
+        System.out.println("[electionWon]\t\t Election won by server with address " + newLeader.address);
         leadServer = newLeader;
         leaderIndeterm = false;
     }
@@ -128,7 +130,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     private boolean serverAlive(ServerInfo server){
         try{
-            Registry registry = LocateRegistry.getRegistry(server.hostname, registryPort);
+            Registry registry = LocateRegistry.getRegistry(server.address, registryPort);
             Id stub = (Id) registry.lookup("leadServer");
             stub.isAlive();
         }catch(Exception e){
@@ -140,10 +142,14 @@ public class IdServer extends UnicastRemoteObject implements Id {
     @Override
     public synchronized ServerInfo currentLeader(){
         if(!serverAlive(leadServer)){
+            System.out.println("[currentLeader]\t\t LeadServer not alive. Running Election.");
             runElection();
             //Wait for election to finish.
             //yes this is slow but we are running low on time
             while(leaderIndeterm){}
+
+            System.out.println("[currentLeader]\t\t Election finished.");
+            System.out.println("[currentLeader]\t\t New leader ip: " + leadServer.address + " PID: " + leadServer.pid);
         }
 
         return leadServer;
@@ -152,6 +158,33 @@ public class IdServer extends UnicastRemoteObject implements Id {
     @Override
     public void isAlive(){
         System.out.println("[isAlive]\t\t Liveness check received");
+    }
+
+    @Override
+    public synchronized ArrayList<ServerInfo> registerServer(String newServerAddress){
+        var highestPID = Collections.max(serverList);
+        ServerInfo newServer = new ServerInfo();
+        newServer.address = newServerAddress;
+        newServer.pid = highestPID.pid+1;
+        serverList.add(newServer);
+
+        //Notify
+        for(var server : serverList){
+            if(thisServer.compareTo(server) == 0) continue;
+
+            try{
+                ((Id)LocateRegistry.getRegistry(server.address, registryPort).lookup("leadServer")).addNewServer(newServer);
+            }catch(Exception e){}
+        }
+
+        System.out.println("[registryPort]\t\t Adding new server with ip of " + newServer.address + " and PID " + newServer.pid);
+        return serverList;
+    }
+
+    @Override
+    public synchronized void addNewServer(ServerInfo newServer){
+        System.out.println("[addNewServer]\t\t Adding new server with ip of " + newServer.address + " and PID " + newServer.pid);
+        serverList.add(newServer);
     }
 
 
@@ -499,6 +532,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * @param args
 	 */
 	public static void main(String args[]) {
+        try{
+            System.out.println("[main]\t\t IP Address: "+ InetAddress.getLocalHost().getHostAddress());
+            System.out.println("[main]\t\t Hostname  : "+ InetAddress.getLocalHost().getHostName());
+        }catch(Exception e){}
 
 		Options options = setupOptions();
 

@@ -1,3 +1,4 @@
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 import java.rmi.RemoteException;
@@ -99,4 +100,15 @@ public interface Id extends java.rmi.Remote
     /** Dummy method used to check if server is alive.
      */
     public void isAlive() throws RemoteException;
+
+    /** Adds a new backup server. Returns a list of all servers, including the callee with a pid assigned.
+     * @param newServerAddress IP address of the sender.
+     * @return a list of all servers.
+     */
+    public ArrayList<ServerInfo> registerServer(String newServerAddress) throws RemoteException;
+
+    /** Adds a new server to the list of standby servers.
+     */
+    public void addNewServer(ServerInfo newServer) throws RemoteException;
+
 }
