@@ -1,19 +1,24 @@
 #!/bin/bash
 function clean(){
-    echo "Caught Ctrl-c. Logs:"
-
+    echo ""
     echo "=====Server 0====="
     sudo docker logs server0
+
+    echo ""
     echo "=====Server 1====="
     sudo docker logs server1
+
+    echo ""
     echo "=====Server 2====="
     sudo docker logs server2
 
+    echo ""
     echo "Killing Containers."
     sudo docker kill server0
     sudo docker kill server1
     sudo docker kill server2
 
+    echo ""
     echo "Deleting Containers."
     sudo docker rm server0
     sudo docker rm server1
