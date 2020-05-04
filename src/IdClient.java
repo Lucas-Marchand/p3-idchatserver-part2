@@ -39,6 +39,12 @@ public class IdClient {
 		return new String(result);
 	}
 
+	/**
+	 * @see
+	 * @param address
+	 * @param port
+	 * @return
+	 */
     private static boolean serverAlive(String address, int port){
         System.out.println("[serverAlive]\t\t Received alive request at " + LocalDateTime.now());
         try{
@@ -105,6 +111,12 @@ public class IdClient {
 		return options;
 	}
 
+	/**
+	 * Finds the leader of the IdServers
+	 * @param serverIPs the list of server IP addresses to search
+	 * @param registryPort the registry port that the leader would be bound to
+	 * @return the ServerInfo of the lead server
+	 */
 	private static Optional<ServerInfo> findLeader(String[] serverIPs, int registryPort) {
 		for (String string : serverIPs) {
 			try {

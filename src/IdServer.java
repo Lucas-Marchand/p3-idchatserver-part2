@@ -12,11 +12,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.lang.annotation.Inherited;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
-import java.rmi.server.RemoteServer;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,6 +31,9 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 
+/**
+ * represents an IdServer containing a database of users
+ */
 public class IdServer extends UnicastRemoteObject implements Id {
 	private static final long serialVersionUID = -5629717487800742372L;
 	private static int registryPort = 1099;
@@ -52,6 +55,9 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 //=====Begin Election Methods=====
 
+	/**
+	 * Sends a victory message to all other servers
+	 */
     private static void sendVictoryMessage(){
         System.out.println("[sendVictoryMessage]\t Sending victory message to all servers.");
         leadServer = thisServer;
@@ -63,8 +69,13 @@ public class IdServer extends UnicastRemoteObject implements Id {
                 ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).electionWon(thisServer);
             }catch(Exception e){}
         }
-    }
-
+	}
+	
+	/**
+	 * Sends an election message to all other servers
+	 * @param server to send the election message to
+	 * @return true if we sent message else false
+	 */
     private static boolean sendElectionMessage(ServerInfo server){
         System.out.println("[sendElectionMessage]\t Sending election message to all higher servers.");
         try{
@@ -75,6 +86,9 @@ public class IdServer extends UnicastRemoteObject implements Id {
         return false;
     }
 
+	/**
+	 * Runs an election between all servers
+	 */
     private synchronized static void runElection(){
         System.out.println("[runElection]\t\t Election started at " + LocalDateTime.now());
         if(serverList.remove(leadServer)){
@@ -107,7 +121,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 //===Begin Remote Election Methods===
 
-    @Override
+	@Override
     public synchronized boolean electionRequest(ServerInfo sender){
         System.out.println("[electionRequest]\t\t Received election request from ip: " + sender.getAddress());
         if(thisServer.compareTo(sender) > 0){   //Sender has a lower PID (expected)
@@ -120,7 +134,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
         return true;
     }
 
-    @Override
+	@Override
     public synchronized void electionWon(ServerInfo newLeader){
         System.out.println("[electionWon]\t\t Election won at " + LocalDateTime.now());
         System.out.println("[electionWon]\t\t Election won by server with address " + newLeader.getAddress());
@@ -132,7 +146,9 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 //=====End Election Methods=====
 
-
+	/**
+	 * wrapper for an interrupt task
+	 */
     private static class InterruptTask extends TimerTask{
         private Thread thd;
         public InterruptTask(Thread thread){
@@ -145,8 +161,11 @@ public class IdServer extends UnicastRemoteObject implements Id {
         }
     }
 
-    
-
+    /**
+	 * Checks if a particular server is alive
+	 * @param server to check if it is able to accept sockets
+	 * @return true if server is alive else false
+	 */
     private static boolean serverAlive(ServerInfo server){
         System.out.println("[serverAlive]\t\t Received alive request at " + LocalDateTime.now());
         try{
@@ -160,28 +179,8 @@ public class IdServer extends UnicastRemoteObject implements Id {
         System.out.println("[serverAlive]\t\t Server deemed dead at " + LocalDateTime.now());
         return false;
     }
-/*
 
-        try{
-            System.err.println("Checking if alive");
-            System.out.println(LocalDateTime.now());
-            Timer timer = new Timer(true);
-            TimerTask interTask = new InterruptTask(Thread.currentThread());
-            //timer.schedule(interTask, 5);
-            boolean result =  ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).isAlive();
-            System.out.println(LocalDateTime.now());
-            System.err.println("Alive");
-            //timer.cancel();
-            return result;
-        }catch(Exception e){}
-
-        System.out.println(LocalDateTime.now());
-        System.err.println("Dead");
-        return false;
-    }
-    */
-
-    @Override
+	@Override
     public ServerInfo currentLeader(){
         System.err.println("[currentLeader]\t\t Received request for lead server");
         if(!serverAlive(leadServer)){
@@ -237,7 +236,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 
 	/**
-	 * @see
+	 * Represents a server that contains a database of users with replication and redundency built in
 	 * @throws RemoteException
 	 */
 	public IdServer() throws RemoteException {
@@ -270,9 +269,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		return options;
 	}
 
-	/**
-	 * @see
-	 */
 	@Override
 	public synchronized boolean modify(String oldLoginName, String newLoginName, String password) {
 		if (verbose) {
@@ -304,9 +300,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		return false;
 	}
 
-	/**
-	 * @see
-	 */
 	@Override
 	public synchronized boolean delete(String loginName, String password) {
 		if (lookupUsers.containsKey(loginName)) {
@@ -322,9 +315,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		return false;
 	}
 
-	/**
-	 * @see
-	 */
 	@Override
 	public synchronized UUID create(String loginName, String realName, String password) {
 		if (lookupUsers.containsKey(loginName)) {
@@ -344,9 +334,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 	}
 
-	/**
-	 * @see
-	 */
 	@Override
 	public synchronized String lookup(String loginName) {
 		User user = lookupUsers.get(loginName);
@@ -363,9 +350,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 	}
 
-	/**
-	 * @see
-	 */
 	@Override
 	public synchronized String reverseLookup(UUID uuid) {
 		User user = reverseLookupUsers.get(uuid);
@@ -382,9 +366,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 	}
 
-	/**
-	 * @see
-	 */
 	@Override
 	public synchronized void persistData() throws RemoteException {
 		if (verbose) {
@@ -416,9 +397,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 	}
 
-	/**
-	 * @see
-	 */
 	@Override
 	public synchronized String get(String listToGet) {
 		if (verbose) {
@@ -450,7 +428,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	/**
 	 * Binds or locates registry for IdServer
 	 * 
-	 * @param name
+	 * @param leaderAddr the address fo the leader to bind registry with
 	 */
 	public void bind(String leaderAddr) {
 		try {
@@ -523,12 +501,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 	/**
 	 * represents all information about a user.
-	 * 
-	 * @author Lucas
-	 *
 	 */
-
-	@SuppressWarnings("unchecked")
 	private static void reloadDatabase() {
 		try {
 			File f = new File("lookupUsers.ser");
