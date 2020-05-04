@@ -69,14 +69,14 @@ public interface Id extends java.rmi.Remote
      * @return
      * @throws RemoteException
      */
-	public Map<String, IdServer.User> getLookupUsersDatabase() throws RemoteException;
+	public Map<String, User> getLookupUsersDatabase() throws RemoteException;
 
     /**
      * gets reverse lookup user data from the lead server
      * @return
      * @throws RemoteException
      */
-	public Map<UUID, IdServer.User> getReverseLookupUsersDatabase() throws RemoteException;
+	public Map<UUID, User> getReverseLookupUsersDatabase() throws RemoteException;
 
     /**
      * Used as part of the election. Servers with a lower pid should send this message to servers with a higher pid.

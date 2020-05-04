@@ -53,7 +53,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 //=====Begin Election Methods=====
 
     private static void sendVictoryMessage(){
-        System.out.println("[sendVictoryMessage]\t\t Sending victory message to all servers.");
+        System.out.println("[sendVictoryMessage]\t Sending victory message to all servers.");
         leadServer = thisServer;
         for(var server : serverList){
             if(thisServer.compareTo(server) == 0) continue;
@@ -282,10 +282,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		User user = lookupUsers.get(oldLoginName);
 
 		if (user != null) {
-			if (user.password.equals(password)) {
+			if (user.getPassword().equals(password)) {
 				lookupUsers.put(newLoginName, user);
 				lookupUsers.remove(oldLoginName);
-				user.timeLastModified = Instant.now();
+				user.setTimeLastModified(Instant.now());
 				if (verbose) {
 					System.out.println("IdServer: " + oldLoginName + " is now " + newLoginName);
 				}
@@ -310,7 +310,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	public synchronized boolean delete(String loginName, String password) {
 		if (lookupUsers.containsKey(loginName)) {
 			User user = lookupUsers.get(loginName);
-			if (user.password.equals(password)) {
+			if (user.getPassword().equals(password)) {
 				if (verbose) {
 					System.out.println("IdServer: Deleted user " + loginName);
 				}
@@ -336,7 +336,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				System.out.println("IdServer: Created user" + loginName);
 			}
 			UUID uuid = UUID.randomUUID();
-			User user = new User(loginName, uuid, realName, password);
+			User user = new User(loginName, uuid, realName, password.getBytes());
 			IdServer.reverseLookupUsers.put(uuid, user);
 			IdServer.lookupUsers.put(loginName, user);
 			return uuid;
@@ -351,7 +351,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		User user = lookupUsers.get(loginName);
 		if (user != null) {
 			if (verbose) {
-				System.out.println("IdServer: was able to lookup, user exists {" + user.loginName + "}");
+				System.out.println("IdServer: was able to lookup, user exists {" + user.getLoginName() + "}");
 			}
 			return user.toString();
 		} else {
@@ -370,7 +370,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		User user = reverseLookupUsers.get(uuid);
 		if (user != null) {
 			if (verbose) {
-				System.out.println("IdServer: user exists {" + user.loginName + "}");
+				System.out.println("IdServer: user exists {" + user.getLoginName() + "}");
 			}
 			return user.toString().toString();
 		} else {
@@ -435,7 +435,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 			for (String s : set) {
 				sb.append(s + ": ");
-				sb.append(IdServer.lookupUsers.get(s).uuid);
+				sb.append(IdServer.lookupUsers.get(s).getUUID());
 				sb.append("\n");
 			}
 			return sb.toString();
@@ -541,39 +541,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * @author Lucas
 	 *
 	 */
-	public class User {
-
-		public UUID uuid;
-		public String loginName;
-		public String realName;
-		public String password;
-		public Instant timeCreated = Instant.now();
-		public Instant timeLastModified = Instant.now();
-
-		/**
-		 * creates a new user with credentials
-		 * 
-		 * @param login
-		 * @param userUUID
-		 * @param real
-		 * @param password2
-		 */
-		public User(String login, UUID userUUID, String real, String password2) {
-			this.loginName = login;
-			this.uuid = userUUID;
-			this.realName = real;
-			this.password = password2;
-		}
-
-		/**
-		 * gives us a way to display user data
-		 */
-		@Override
-		public String toString() {
-			return "Login Name: " + loginName + "; Real Name: " + realName + "; UUID: " + uuid + "; Last Modified: "
-					+ timeLastModified + "; Time Created: " + timeCreated;
-		}
-	}
 
 	@SuppressWarnings("unchecked")
 	private static void reloadDatabase() {

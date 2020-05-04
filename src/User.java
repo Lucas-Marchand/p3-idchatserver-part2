@@ -7,7 +7,7 @@ public class User implements Serializable{
 	private UUID uuid;
     private String loginName;
     private String realName;
-    public byte[] password;
+    private byte[] password;
     private Instant timeCreated = Instant.now();
     private Instant timeLastModified = Instant.now();
 
@@ -17,6 +17,19 @@ public class User implements Serializable{
         this.realName = real;
         this.password = password;
     }
+
+    public byte[] getPassword(){
+        return password;
+    }
+
+    public String getLoginName(){
+        return loginName;
+    }
+
+    public UUID getUUID(){
+        return uuid;
+    }
+
 
     @Override
     public String toString() {

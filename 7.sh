@@ -48,7 +48,7 @@ echo ""
 echo "=====Sending two concurrent requests to two different servers====="
 echo ""
 java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.2 -c lucas -p marchand -n 5654 
-java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -c John -p johnson -n 5654
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -c john -p johnson -n 5654
 
 sleep 10
 
@@ -64,6 +64,14 @@ echo ""
 java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -g all -n 5654 
 echo "First command finished"
 java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.2 172.17.0.5 -g all -n 5654
+echo "Second finished. Sending a bunch of commands to see if it works"
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -g all -n 5654
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -g uuids -n 5654
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -g users -n 5654
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -m lucas john -p marchand -n 5654
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -g all -n 5654
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -d john -p johnson -n 5654
+java -cp ./src/:./inc/commons-cli-1.4/commons-cli-1.4.jar IdClient -s 172.17.0.3 -g all -n 5654
 
 sleep 5
 
