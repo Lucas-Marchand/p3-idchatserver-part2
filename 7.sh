@@ -23,6 +23,7 @@ function clean(){
     sudo docker rm server0
     sudo docker rm server1
     sudo docker rm server2
+    exit
 }
 
 trap "clean" 2
@@ -33,16 +34,16 @@ make clean
 make
 sudo docker build -t idserver .
 
-TIMEOUT="-Djava.rmi.activation.execTimeout=1000"
+TIMEOUT="-Djava.rmi.server.disableHttp=true"
 
 echo ""
 echo "=====Starting servers====="
 echo ""
 sudo docker run -d --name server0 idserver
 sleep 1
-sudo docker run -d --name server1 idserver -i 172.17.0.2
+sudo docker run -d --name server1 idserver -i 172.17.0.2 $TIMEOUT
 sleep 1
-sudo docker run -d --name server2 idserver -i 172.17.0.2
+sudo docker run -d --name server2 idserver -i 172.17.0.2 $TIMEOUT
 sleep 1
 
 echo ""
@@ -56,7 +57,7 @@ echo ""
 echo "=====Killing lead server====="
 echo ""
 sudo docker kill server0
-sleep 1
+sleep 3
 
 echo ""
 echo "=====Sending two concurrent requests(Election should happen)====="
