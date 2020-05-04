@@ -1,3 +1,4 @@
+import java.time.LocalDateTime;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,7 +63,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
     }
 
     private static boolean sendElectionMessage(ServerInfo server){
-        System.out.println("[sendElectionMessage]\t\t Sending election message to all higher servers.");
+        System.out.println("[sendElectionMessage]\t Sending election message to all higher servers.");
         try{
             ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).electionRequest(thisServer);
             return true;
@@ -72,6 +73,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
     }
 
     private synchronized static void runElection(){
+        System.out.println("[runElection]\t\t Election started at " + LocalDateTime.now());
+        if(serverList.remove(leadServer)){
+            System.out.println("Leader removed");
+        }
         leaderIndeterm = true;
         //Check if we are the highest PID
         ServerInfo highestPID = Collections.max(serverList);
@@ -114,6 +119,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     @Override
     public synchronized void electionWon(ServerInfo newLeader){
+        System.out.println("[electionWon]\t\t Election won at " + LocalDateTime.now());
         System.out.println("[electionWon]\t\t Election won by server with address " + newLeader.getAddress());
         leadServer = newLeader;
         leaderIndeterm = false;
@@ -123,21 +129,45 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 //=====End Election Methods=====
 
-    private boolean serverAlive(ServerInfo server){
-        try{
-            Registry registry = LocateRegistry.getRegistry(server.getAddress(), registryPort);
-            Id stub = (Id) registry.lookup("server");
-            return stub.isAlive();
-        }catch(Exception e){
-            return false;
+
+    private static class InterruptTask extends TimerTask{
+        private Thread thd;
+        public InterruptTask(Thread thread){
+            thd = thread;
+        }
+
+        @Override
+        public void run(){
+            thd.interrupt();
         }
     }
 
+    
+
+    private boolean serverAlive(ServerInfo server){
+        try{
+            System.err.println("Checking if alive");
+            System.out.println(LocalDateTime.now());
+            Timer timer = new Timer(true);
+            TimerTask interTask = new InterruptTask(Thread.currentThread());
+            //timer.schedule(interTask, 5);
+            boolean result =  ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).isAlive();
+            System.out.println(LocalDateTime.now());
+            System.err.println("Alive");
+            //timer.cancel();
+            return result;
+        }catch(Exception e){}
+
+        System.out.println(LocalDateTime.now());
+        System.err.println("Dead");
+        return false;
+    }
+
     @Override
-    public synchronized ServerInfo currentLeader(){
-        System.out.println("[currentLeader]\t\t Received request for lead server");
+    public ServerInfo currentLeader(){
+        System.err.println("[currentLeader]\t\t Received request for lead server");
         if(!serverAlive(leadServer)){
-            System.out.println("[currentLeader]\t\t LeadServer not alive. Running Election.");
+            System.err.println("[currentLeader]\t\t LeadServer not alive. Running Election.");
             runElection();
             //Wait for election to finish.
             //yes this is slow but we are running low on time
@@ -145,9 +175,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
             System.out.println("[currentLeader]\t\t Election finished.");
             System.out.println("[currentLeader]\t\t New leader ip: " + leadServer.getAddress() + " PID: " + leadServer.getPID());
+        }else{
+            System.err.println("Leader is still alive. IP:" + leadServer.getAddress());
         }
 
-        System.out.println("Leader is still alive. IP:" + leadServer.getAddress());
 
         return leadServer;
     }
@@ -602,7 +633,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 				// we need a timer running to make sure if we are a leader we persist data to disk
 				int delay = 5000; // delay for 5 sec.
-				int period = 30000; // repeat every 15 sec.
+				int period = 5000; // repeat every 15 sec.
 				Timer timer = new Timer();
 
 				timer.scheduleAtFixedRate(new TimerTask() {
@@ -623,7 +654,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				
 				// we need another timer that will get data from the leader every so often just in case we need to become a leader
 				delay = 5000; // delay for 5 sec.
-				period = 30000; // repeat every 15 sec.
+				period = 5000; // repeat every 15 sec.
 				Timer timer2 = new Timer();
 
 				timer2.scheduleAtFixedRate(new TimerTask() {

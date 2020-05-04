@@ -93,7 +93,9 @@ public class IdClient {
 	private static Optional<ServerInfo> findLeader(String[] serverIPs, int registryPort) {
 		for (String string : serverIPs) {
 			try {
-                return Optional.of(((Id)LocateRegistry.getRegistry(string, registryPort).lookup("server")).currentLeader());
+                var result =  Optional.of(((Id)LocateRegistry.getRegistry(string, registryPort).lookup("server")).currentLeader());
+                System.out.println("IP " + string + " is alive.");
+                return result;
 			} catch(Exception e){
                 System.out.println("IP " + string + " failed, trying next one.");
             }
@@ -138,6 +140,8 @@ public class IdClient {
 				System.out.println("no leader was found by client");
 				System.exit(1);
 			}
+
+            System.out.println("Leader is " + host.get().getAddress());
 			
 			Registry registry = LocateRegistry.getRegistry(host.get().getAddress(), registryPort);
 			Id stub = (Id) registry.lookup("server");
