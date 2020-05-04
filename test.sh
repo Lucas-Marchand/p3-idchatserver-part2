@@ -1,4 +1,3 @@
-#!/bin/bash
 echo "INFO: building project"
 make clean
 make
