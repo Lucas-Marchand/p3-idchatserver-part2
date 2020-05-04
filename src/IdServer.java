@@ -592,7 +592,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				// we need another timer that will get data from the leader every so often just
 				// in case we need to become a leader
 				delay = 5000; // delay for 5 sec.
-				period = 30000; // repeat every 15 sec.
+				period = 300; // repeat every 15 sec.
 				Timer timer2 = new Timer();
 
 				timer2.scheduleAtFixedRate(new TimerTask() {
