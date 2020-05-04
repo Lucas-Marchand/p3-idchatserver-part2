@@ -34,11 +34,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	private static Map<String, User> lookupUsers = new HashMap<String, User>();
 	private static Map<UUID, User> reverseLookupUsers = new HashMap<UUID, User>();
 	private static boolean verbose = false;
-	private static String BACKUP_SERVER = "backupServer";
-	private static String LEAD_SERVER = "leadServer";
-	private static String LEADER_IP = "";
-	private static String[] serverIPs = new String[0];
-	private static Boolean isLeader = false;
 
     private static ArrayList<ServerInfo> serverList = new ArrayList<ServerInfo>();
     private static ServerInfo thisServer = null;
@@ -61,7 +56,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
             if(thisServer.compareTo(server) == 0) continue;
 
             try{
-                ((Id)LocateRegistry.getRegistry(server.address, registryPort).lookup("leadServer")).electionWon(thisServer);
+                ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).electionWon(thisServer);
             }catch(Exception e){}
         }
     }
@@ -69,7 +64,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
     private static boolean sendElectionMessage(ServerInfo server){
         System.out.println("[sendElectionMessage]\t\t Sending election message to all higher servers.");
         try{
-            ((Id)LocateRegistry.getRegistry(server.address, registryPort).lookup("leadServer")).electionRequest(thisServer);
+            ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).electionRequest(thisServer);
             return true;
         }catch(Exception e){}
 
@@ -106,11 +101,11 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     @Override
     public synchronized boolean electionRequest(ServerInfo sender){
-        System.out.println("[electionRequest]\t\t Received election request from ip: " + sender.address);
+        System.out.println("[electionRequest]\t\t Received election request from ip: " + sender.getAddress());
         if(thisServer.compareTo(sender) > 0){   //Sender has a lower PID (expected)
             runElection();
         }else{
-            System.out.println("[electionRequest]\t\t Sender has a lower pid, ignoring. IP: " + sender.address);
+            System.out.println("[electionRequest]\t\t Sender has a lower pid, ignoring. IP: " + sender.getAddress());
             return false;
         }
 
@@ -119,7 +114,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     @Override
     public synchronized void electionWon(ServerInfo newLeader){
-        System.out.println("[electionWon]\t\t Election won by server with address " + newLeader.address);
+        System.out.println("[electionWon]\t\t Election won by server with address " + newLeader.getAddress());
         leadServer = newLeader;
         leaderIndeterm = false;
     }
@@ -130,8 +125,8 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     private boolean serverAlive(ServerInfo server){
         try{
-            Registry registry = LocateRegistry.getRegistry(server.address, registryPort);
-            Id stub = (Id) registry.lookup("leadServer");
+            Registry registry = LocateRegistry.getRegistry(server.getAddress(), registryPort);
+            Id stub = (Id) registry.lookup("server");
             stub.isAlive();
         }catch(Exception e){
             return false;
@@ -149,7 +144,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
             while(leaderIndeterm){}
 
             System.out.println("[currentLeader]\t\t Election finished.");
-            System.out.println("[currentLeader]\t\t New leader ip: " + leadServer.address + " PID: " + leadServer.pid);
+            System.out.println("[currentLeader]\t\t New leader ip: " + leadServer.getAddress() + " PID: " + leadServer.getPID());
         }
 
         return leadServer;
@@ -163,9 +158,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
     @Override
     public synchronized ArrayList<ServerInfo> registerServer(String newServerAddress){
         var highestPID = Collections.max(serverList);
-        ServerInfo newServer = new ServerInfo();
-        newServer.address = newServerAddress;
-        newServer.pid = highestPID.pid+1;
+        ServerInfo newServer = new ServerInfo(highestPID.getPID()+1, newServerAddress);
         serverList.add(newServer);
 
         //Notify
@@ -173,17 +166,17 @@ public class IdServer extends UnicastRemoteObject implements Id {
             if(thisServer.compareTo(server) == 0) continue;
 
             try{
-                ((Id)LocateRegistry.getRegistry(server.address, registryPort).lookup("leadServer")).addNewServer(newServer);
+                ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).addNewServer(newServer);
             }catch(Exception e){}
         }
 
-        System.out.println("[registryPort]\t\t Adding new server with ip of " + newServer.address + " and PID " + newServer.pid);
+        System.out.println("[registryPort]\t\t Adding new server with ip of " + newServer.getAddress() + " and PID " + newServer.getPID());
         return serverList;
     }
 
     @Override
     public synchronized void addNewServer(ServerInfo newServer){
-        System.out.println("[addNewServer]\t\t Adding new server with ip of " + newServer.address + " and PID " + newServer.pid);
+        System.out.println("[addNewServer]\t\t Adding new server with ip of " + newServer.getAddress() + " and PID " + newServer.getPID());
         serverList.add(newServer);
     }
 
@@ -403,7 +396,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * 
 	 * @param name
 	 */
-	public void bind() {
+	public void bind(String leaderAddr) {
 		try {
 			// we will always need to register our server with registry weather backup or leader
 			Registry registry = null;
@@ -423,41 +416,68 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				server = (Id) UnicastRemoteObject.exportObject(this, 0);
 			}
 
+            String selfAddress = null;
+            try{
+                selfAddress = InetAddress.getLocalHost().getHostAddress();
+            }catch(Exception e){
+                System.out.println("Failed to get own address: " + e.toString());
+                throw new RuntimeException();
+            }
+
+
+            if(leaderAddr == null){
+                //We are the first, so we are the leader
+                System.out.println("Other server not specified, making self leader.");
+                ServerInfo us = new ServerInfo(1, selfAddress);
+                leadServer = us;
+                thisServer = us;
+                serverList.add(us);
+            }else{
+                try{
+                    leadServer = ((Id)LocateRegistry.getRegistry(leaderAddr, registryPort).lookup("server")).currentLeader();
+                    System.out.println("Got leader");
+                    System.out.println("Leader PID: " + leadServer.getPID());
+                    System.out.println("Leader address: " + leadServer.getAddress());
+
+                    serverList = ((Id)LocateRegistry.getRegistry(leaderAddr, registryPort).lookup("server")).registerServer(selfAddress);
+                    System.out.println("Successfully registered with other server");
+                    //Find ourselves
+                    for(var server_ : serverList){
+                        if(server_.getAddress().equals(selfAddress)){
+                            thisServer = server_;
+                            break;
+                        }
+                    }
+                }catch(Exception e){
+                    System.out.println("Unable to connect to provided server, aborting.");
+                    System.out.println("IP: " + leaderAddr);
+                    System.out.println(e.toString());
+                    return;
+                }
+            }
+
+            registry.rebind("server", server);
+            System.out.println("server" + " bound in registry to port: " + registryPort);
+
+            /*
 			// determnine if we bind our name as a leader or a backup
 			if (foundLeader()) {
                 System.out.println("Leader found, starting as backup");
 				isLeader = false;
-				registry.rebind(BACKUP_SERVER, server);
-				System.out.println(BACKUP_SERVER + " bound in registry to port: " + registryPort);
+				registry.rebind("server", server);
+				System.out.println("server" + " bound in registry to port: " + registryPort);
 			} else {
                 System.out.println("No leader found, making self leader");
 				isLeader = true;
-				registry.rebind(LEAD_SERVER, server);
-				System.out.println(LEAD_SERVER + " bound in registry to port: " + registryPort);
+				registry.rebind("server", server);
+				System.out.println("server" + " bound in registry to port: " + registryPort);
 			}
+            */
 
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println("INFO: Exception occurred: " + e);
 		}
-	}
-
-	private boolean foundLeader() {
-		for (String string : serverIPs) {
-			try {
-				Registry r = LocateRegistry.getRegistry(string, registryPort);
-				r.lookup(LEAD_SERVER);
-				LEADER_IP = string;
-				System.out.println("Leader IP is: " + LEADER_IP);
-				
-				return true;
-			} catch (RemoteException e) { // didnt find a registry
-				continue;
-			} catch (NotBoundException e) { // didnt find a bound name
-				continue;
-			}
-		}
-		return false;
 	}
 
 	/**
@@ -532,10 +552,15 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * @param args
 	 */
 	public static void main(String args[]) {
+        String selfAddress = null;
         try{
             System.out.println("[main]\t\t IP Address: "+ InetAddress.getLocalHost().getHostAddress());
             System.out.println("[main]\t\t Hostname  : "+ InetAddress.getLocalHost().getHostName());
-        }catch(Exception e){}
+            selfAddress = InetAddress.getLocalHost().getHostAddress();
+        }catch(Exception e){
+            System.out.println("Unable to get local address, aborting");
+            return;
+        }
 
 		Options options = setupOptions();
 
@@ -553,9 +578,11 @@ public class IdServer extends UnicastRemoteObject implements Id {
 			// parse the command line arguments
 			CommandLine line = parser.parse(options, args);
 
+            String leaderAddr = null;
+
 			if (line.hasOption('i')) {
-				serverIPs = line.getOptionValues('i');
-			}
+				leaderAddr = line.getOptionValue('i');
+            }
 
 			if (line.hasOption('n')) {
 				registryPort = Integer.parseInt(line.getOptionValue('n'));
@@ -568,7 +595,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 			try {
 				System.out.println("Setting System Properties....");
 				IdServer server = new IdServer();
-				server.bind();
+				server.bind(leaderAddr);
 
 				// we need a timer running to make sure if we are a leader we persist data to disk
 				int delay = 5000; // delay for 5 sec.
@@ -577,10 +604,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
 				timer.scheduleAtFixedRate(new TimerTask() {
 					public void run() {
-						if (isLeader){
+						if (isLeader()){
 							try {
 								Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
-								Id stub = (Id) registry.lookup(LEAD_SERVER);
+								Id stub = (Id) registry.lookup("server");
 								stub.persistData();
 							} catch (RemoteException e) {
 								e.printStackTrace();
@@ -599,8 +626,8 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				timer2.scheduleAtFixedRate(new TimerTask() {
 					public void run() {
 						try {
-							Registry registry = LocateRegistry.getRegistry(LEADER_IP, registryPort);
-							Id stub = (Id) registry.lookup(LEAD_SERVER);
+							Registry registry = LocateRegistry.getRegistry(leadServer.getAddress(), registryPort);
+							Id stub = (Id) registry.lookup("server");
 							lookupUsers = stub.getLookupUsersDatabase();
 							reverseLookupUsers = stub.getReverseLookupUsersDatabase();
 						} catch (RemoteException e) {
@@ -618,10 +645,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 							System.out.println("Shutting down ...");
 							Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
 							Id stub = null;
-							if (isLeader){
-								stub = (Id) registry.lookup(LEAD_SERVER);
+							if (isLeader()){
+								stub = (Id) registry.lookup("server");
 							}else {
-								stub = (Id) registry.lookup(BACKUP_SERVER);
+								stub = (Id) registry.lookup("server");
 							}
 							stub.persistData();
 						} catch (RemoteException e) {

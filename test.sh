@@ -6,7 +6,7 @@ make
 echo "INFO: setting up docker"
 sudo docker build -t idserver .
 sudo docker run -d --name server0 idserver
-sudo docker run -d --name server1 idserver
+sudo docker run -d --name server1 idserver -i 172.17.0.2
 
 sleep 30
 
