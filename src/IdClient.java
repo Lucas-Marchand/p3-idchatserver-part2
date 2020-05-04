@@ -1,3 +1,7 @@
+import java.net.Socket;
+import java.net.InetSocketAddress;
+import java.time.LocalDateTime;
+
 import java.util.Optional;
 import java.nio.charset.StandardCharsets;
 import java.rmi.NotBoundException;
@@ -37,6 +41,20 @@ public class IdClient {
 		byte[] result = md.digest(bytes);
 		return new String(result);
 	}
+
+    private static boolean serverAlive(String address, int port){
+        System.out.println("[serverAlive]\t\t Received alive request at " + LocalDateTime.now());
+        try{
+            Socket socket = new Socket();
+            socket.setSoTimeout(500);
+            socket.connect(new InetSocketAddress(address, port), 500);
+            socket.close();
+            System.out.println("[serverAlive]\t\t Verified server is alive at " + LocalDateTime.now());
+            return true;
+        }catch(Exception e){}
+        System.out.println("[serverAlive]\t\t Server deemed dead at " + LocalDateTime.now());
+        return false;
+    }
 
 	/**
 	 * creates the command line options for parsing
@@ -93,6 +111,11 @@ public class IdClient {
 	private static Optional<ServerInfo> findLeader(String[] serverIPs, int registryPort) {
 		for (String string : serverIPs) {
 			try {
+                if(!serverAlive(string, registryPort)){
+                    System.out.println("Server " + string + " did not respond to a ping, skipping.");
+                    continue;
+                }
+
                 var result =  Optional.of(((Id)LocateRegistry.getRegistry(string, registryPort).lookup("server")).currentLeader());
                 System.out.println("IP " + string + " is alive.");
                 return result;

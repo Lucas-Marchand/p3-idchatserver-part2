@@ -1,5 +1,7 @@
 import java.time.LocalDateTime;
 import java.net.InetAddress;
+import java.net.Socket;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Timer;
@@ -55,6 +57,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
         leadServer = thisServer;
         for(var server : serverList){
             if(thisServer.compareTo(server) == 0) continue;
+            if(!serverAlive(server)) continue;
 
             try{
                 ((Id)LocateRegistry.getRegistry(server.getAddress(), registryPort).lookup("server")).electionWon(thisServer);
@@ -88,7 +91,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
         boolean leaderAlive = false;
         for(var server : serverList){
-            if(thisServer.compareTo(server) < 0){   //Remote servere has greater pid
+            if(thisServer.compareTo(server) < 0 && serverAlive(server)){   //Remote servere has greater pid
                 if(sendElectionMessage(server)){
                     leaderAlive = true;
                 }
@@ -144,7 +147,21 @@ public class IdServer extends UnicastRemoteObject implements Id {
 
     
 
-    private boolean serverAlive(ServerInfo server){
+    private static boolean serverAlive(ServerInfo server){
+        System.out.println("[serverAlive]\t\t Received alive request at " + LocalDateTime.now());
+        try{
+            Socket socket = new Socket();
+            socket.setSoTimeout(500);
+            socket.connect(new InetSocketAddress(server.getAddress(), registryPort), 500);
+            socket.close();
+            System.out.println("[serverAlive]\t\t Verified server is alive at " + LocalDateTime.now());
+            return true;
+        }catch(Exception e){}
+        System.out.println("[serverAlive]\t\t Server deemed dead at " + LocalDateTime.now());
+        return false;
+    }
+/*
+
         try{
             System.err.println("Checking if alive");
             System.out.println(LocalDateTime.now());
@@ -162,6 +179,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
         System.err.println("Dead");
         return false;
     }
+    */
 
     @Override
     public ServerInfo currentLeader(){
@@ -171,12 +189,15 @@ public class IdServer extends UnicastRemoteObject implements Id {
             runElection();
             //Wait for election to finish.
             //yes this is slow but we are running low on time
-            while(leaderIndeterm){}
+            while(leaderIndeterm){
+                System.out.print(".");
+            }
+            System.out.println();
 
             System.out.println("[currentLeader]\t\t Election finished.");
             System.out.println("[currentLeader]\t\t New leader ip: " + leadServer.getAddress() + " PID: " + leadServer.getPID());
         }else{
-            System.err.println("Leader is still alive. IP:" + leadServer.getAddress());
+            System.err.println("[currentLeader]\t\t Leader is still alive. IP:" + leadServer.getAddress());
         }
 
 
@@ -660,6 +681,9 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				timer2.scheduleAtFixedRate(new TimerTask() {
 					public void run() {
 						try {
+                            if(thisServer == leadServer) return;
+                            if(!serverAlive(leadServer)) return;
+
 							Registry registry = LocateRegistry.getRegistry(leadServer.getAddress(), registryPort);
 							Id stub = (Id) registry.lookup("server");
 							lookupUsers = stub.getLookupUsersDatabase();

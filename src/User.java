@@ -1,6 +1,8 @@
 import java.time.Instant;
 import java.util.UUID;
-public class User {
+import java.io.Serializable;
+public class User implements Serializable{
+    static public final long serialVersionUID = 236423409294L;
 
 	private UUID uuid;
     private String loginName;
