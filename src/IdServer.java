@@ -292,7 +292,8 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				return true;
 			} else {
 				if (verbose) {
-					System.out.println("IdServer: Incorrect password for" + oldLoginName);
+					System.out.println("IdServer: Incorrect password for " + oldLoginName);
+					System.out.println("oldPass: " + user.getPassword());
 				}
 			}
 		} else {
@@ -336,7 +337,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				System.out.println("IdServer: Created user" + loginName);
 			}
 			UUID uuid = UUID.randomUUID();
-			User user = new User(loginName, uuid, realName, password.getBytes());
+			User user = new User(loginName, uuid, realName, password);
 			IdServer.reverseLookupUsers.put(uuid, user);
 			IdServer.lookupUsers.put(loginName, user);
 			return uuid;
@@ -514,21 +515,6 @@ public class IdServer extends UnicastRemoteObject implements Id {
             registry.rebind("server", server);
             System.out.println("server" + " bound in registry to port: " + registryPort);
 
-            /*
-			// determnine if we bind our name as a leader or a backup
-			if (foundLeader()) {
-                System.out.println("Leader found, starting as backup");
-				isLeader = false;
-				registry.rebind("server", server);
-				System.out.println("server" + " bound in registry to port: " + registryPort);
-			} else {
-                System.out.println("No leader found, making self leader");
-				isLeader = true;
-				registry.rebind("server", server);
-				System.out.println("server" + " bound in registry to port: " + registryPort);
-			}
-            */
-
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.out.println("INFO: Exception occurred: " + e);
@@ -641,8 +627,8 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				}, delay, period);
 				
 				// we need another timer that will get data from the leader every so often just in case we need to become a leader
-				delay = 5000; // delay for 5 sec.
-				period = 5000; // repeat every 15 sec.
+				delay = 100; // delay for 100ms.
+				period = 300; // repeat every 300 ms.
 				Timer timer2 = new Timer();
 
 				timer2.scheduleAtFixedRate(new TimerTask() {
