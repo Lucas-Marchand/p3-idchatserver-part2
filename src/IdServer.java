@@ -13,13 +13,13 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.rmi.server.RemoteServer;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.time.Instant;
-import java.rmi.ConnectException;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -338,6 +338,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 */
 	@Override
 	public synchronized void persistData() throws RemoteException {
+		if (verbose) {
+			System.out.println("IdServer: Persisting data securely to disk");
+		}
+
 		try {
 
 			// Convert Map to byte array
@@ -438,14 +442,14 @@ public class IdServer extends UnicastRemoteObject implements Id {
 		}
 	}
 
-	private static boolean foundLeader() {
+	private boolean foundLeader() {
 		for (String string : serverIPs) {
 			try {
 				Registry r = LocateRegistry.getRegistry(string, registryPort);
 				r.lookup(LEAD_SERVER);
 				LEADER_IP = string;
 				System.out.println("Leader IP is: " + LEADER_IP);
-
+				
 				return true;
 			} catch (RemoteException e) { // didnt find a registry
 				continue;
@@ -528,11 +532,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 	 * @param args
 	 */
 	public static void main(String args[]) {
-		try {
-			System.out.println("[main]\t\t IP Address: " + InetAddress.getLocalHost().getHostAddress());
-			System.out.println("[main]\t\t Hostname  : " + InetAddress.getLocalHost().getHostName());
-		} catch (Exception e) {
-		}
+        try{
+            System.out.println("[main]\t\t IP Address: "+ InetAddress.getLocalHost().getHostAddress());
+            System.out.println("[main]\t\t Hostname  : "+ InetAddress.getLocalHost().getHostName());
+        }catch(Exception e){}
 
 		Options options = setupOptions();
 
@@ -567,15 +570,14 @@ public class IdServer extends UnicastRemoteObject implements Id {
 				IdServer server = new IdServer();
 				server.bind();
 
-				// we need a timer running to make sure if we are a leader we persist data to
-				// disk
+				// we need a timer running to make sure if we are a leader we persist data to disk
 				int delay = 5000; // delay for 5 sec.
 				int period = 30000; // repeat every 15 sec.
 				Timer timer = new Timer();
 
 				timer.scheduleAtFixedRate(new TimerTask() {
 					public void run() {
-						if (isLeader) {
+						if (isLeader){
 							try {
 								Registry registry = LocateRegistry.getRegistry("localhost", registryPort);
 								Id stub = (Id) registry.lookup(LEAD_SERVER);
@@ -588,11 +590,10 @@ public class IdServer extends UnicastRemoteObject implements Id {
 						}
 					}
 				}, delay, period);
-
-				// we need another timer that will get data from the leader every so often just
-				// in case we need to become a leader
+				
+				// we need another timer that will get data from the leader every so often just in case we need to become a leader
 				delay = 5000; // delay for 5 sec.
-				period = 300; // repeat every 15 sec.
+				period = 30000; // repeat every 15 sec.
 				Timer timer2 = new Timer();
 
 				timer2.scheduleAtFixedRate(new TimerTask() {
@@ -603,33 +604,7 @@ public class IdServer extends UnicastRemoteObject implements Id {
 							lookupUsers = stub.getLookupUsersDatabase();
 							reverseLookupUsers = stub.getReverseLookupUsersDatabase();
 						} catch (RemoteException e) {
-							try{
-								// we will always need to register our server with registry weather backup or leader
-								Registry registry = null;
-								try {
-									registry = LocateRegistry.getRegistry(registryPort);
-									System.out.println(registry.list());
-								} catch (RemoteException e1) {
-									registry = LocateRegistry.createRegistry(registryPort);
-								}
-
-								// determnine if we bind our name as a leader or a backup
-								if (foundLeader()) {
-									System.out.println("Leader found, starting as backup");
-									isLeader = false;
-									registry.rebind(BACKUP_SERVER, server);
-									System.out.println(BACKUP_SERVER + " bound in registry to port: " + registryPort);
-								} else {
-									System.out.println("No leader found, making self leader");
-									isLeader = true;
-									registry.rebind(LEAD_SERVER, server);
-									System.out.println(LEAD_SERVER + " bound in registry to port: " + registryPort);
-								}
-
-							} catch (Exception e2) {
-								System.out.println("could not become the leader or find one, going to exit");
-								System.exit(1);
-							}
+							e.printStackTrace();
 						} catch (NotBoundException e) {
 							e.printStackTrace();
 						}
