@@ -1,7 +1,7 @@
 # Identity Server Part 2 | Project 3
 #### Lucas Marchand and Jared White
 #### CS455-001 S2020
-#### [Video Link]()
+#### [Video Link](https://youtu.be/5YWwkdM0-5Y)
 
 ## Table of contents
   - [Table of contents](#table-of-contents)
@@ -30,6 +30,8 @@ p3-idserver-part2
 ```
 
 ## Building and running
+
+must have Java 11 to run
 
 To build
 ```bash
